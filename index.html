@@ -37,20 +37,20 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
 .view-switch{display:flex;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:var(--shadow-sm)}
 .view-btn{min-width:0;width:auto;border-radius:999px;padding:8px 12px;background:transparent;color:var(--muted);border:0;box-shadow:none;font-size:13px}
 .view-btn:hover{transform:none;box-shadow:none}
-.view-btn.active{background:var(--ink);color:white}
+.view-btn.active{background:var(--ink);color:white}.share-link{min-width:0;width:auto;white-space:nowrap;border-radius:999px;padding:9px 13px;background:#fff;color:var(--ink);border-color:var(--line);box-shadow:var(--shadow-sm);font-size:13px}
 .active-filters{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;min-height:28px}
 .filter-chip{display:inline-flex;align-items:center;gap:7px;background:var(--soft);color:var(--accent-dark);border:1px solid rgba(0,184,200,.22);border-radius:999px;padding:7px 10px;font-size:12px;font-weight:800}
 .filter-chip button{all:unset;cursor:pointer;font-size:15px;line-height:1;color:var(--accent-dark)}
 .calendar-shell{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:30px;box-shadow:var(--shadow);overflow:hidden}
-.days-header{display:grid;grid-template-columns:var(--time-col) repeat(var(--visible-days),1fr);height:var(--header-h);border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:25}
+.days-header{display:grid;grid-template-columns:var(--time-col) repeat(var(--visible-days),minmax(0,1fr));height:var(--header-h);border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:25;width:max(100%,calc(var(--time-col) + var(--grid-min)));will-change:transform}
 .corner{border-right:1px solid var(--line);background:var(--soft)}
 .day-head{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;font-weight:900;border-right:1px solid var(--line);font-size:14px;letter-spacing:.01em;text-align:center}
 .day-head:last-child{border-right:none}
 .day-count{font-size:11px;font-weight:750;color:var(--muted)}
-.grid-wrap{display:grid;grid-template-columns:var(--time-col) 1fr;max-height:72vh;overflow:auto;position:relative}
+.grid-wrap{display:grid;grid-template-columns:var(--time-col) minmax(var(--grid-min),1fr);max-height:72vh;overflow:auto;position:relative}
 .time-axis{position:relative;background:#fbfeff;border-right:1px solid var(--line);height:calc(var(--hour) * var(--hours))}
 .time-label{position:absolute;right:12px;transform:translateY(-50%);color:#7f8e98;font-size:12px;font-weight:800}
-.days-grid{display:grid;grid-template-columns:repeat(var(--visible-days),1fr);position:relative;height:calc(var(--hour) * var(--hours));min-width:var(--grid-min)}
+.days-grid{display:grid;grid-template-columns:repeat(var(--visible-days),minmax(0,1fr));position:relative;height:calc(var(--hour) * var(--hours));min-width:var(--grid-min);width:100%}
 .day-col{position:relative;border-right:1px solid var(--line);background-image:linear-gradient(to bottom,transparent calc(var(--hour) - 1px),var(--line) calc(var(--hour) - 1px));background-size:100% var(--hour)}
 .day-col:last-child{border-right:none}
 .event{position:absolute;border-radius:16px;padding:9px 10px;overflow:hidden;background:#fff;border:1px solid rgba(0,184,200,.34);box-shadow:0 8px 22px rgba(0,77,86,.10);border-left:5px solid var(--accent);cursor:pointer;transition:.14s transform,.14s box-shadow;min-height:44px}
@@ -87,7 +87,7 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
   .app{padding:18px}.hero{display:block}h1{font-size:32px}.pills{justify-content:flex-start;margin-top:14px}.controls{grid-template-columns:1fr;position:static;border-radius:22px}.reset{align-self:auto}.meta-row{align-items:flex-start;flex-direction:column}.day-tabs{overflow:auto;flex-wrap:nowrap;width:100%;padding-bottom:2px}.day-tab{white-space:nowrap}.calendar-shell{border-radius:24px}.grid-wrap{max-height:68vh}.event-title{font-size:11px}.detail-grid{grid-template-columns:1fr;gap:3px}.detail-grid div:nth-child(even){margin-bottom:8px}.list-card{grid-template-columns:1fr;gap:8px}
 }
 @media(max-width:640px){
-  .pills .pill{font-size:12px;padding:8px 10px}.view-switch{width:100%}.view-btn{flex:1}.calendar-shell:not(.grid-forced) .days-header,.calendar-shell:not(.grid-forced) .grid-wrap{display:none}.calendar-shell:not(.grid-forced) .list-view{display:block}
+  .pills .pill{font-size:12px;padding:8px 10px}.view-switch{width:100%}.view-btn{flex:1}.share-link{width:100%}.calendar-shell:not(.grid-forced) .days-header,.calendar-shell:not(.grid-forced) .grid-wrap{display:none}.calendar-shell:not(.grid-forced) .list-view{display:block}
 }
 </style></head>
 <body><div class="app">
@@ -101,7 +101,7 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
     <div class="field"><label for="teacher">Преподаватель</label><select id="teacher"><option value="">Все преподаватели</option></select></div>
     <button class="reset" id="reset">Сбросить</button>
   </div>
-  <div class="meta-row"><div class="day-tabs" id="tabs"></div><div class="view-switch"><button class="view-btn active" id="gridView">Сетка</button><button class="view-btn" id="listView">Список</button></div></div>
+  <div class="meta-row"><div class="day-tabs" id="tabs"></div><div class="view-switch"><button class="view-btn active" id="gridView">Сетка</button><button class="view-btn" id="listView">Список</button></div><button class="share-link" id="shareLink" type="button">Скопировать ссылку</button></div>
   <div class="active-filters" id="activeFilters"></div>
   <div class="calendar-shell" id="calendarShell"><div class="days-header" id="daysHeader"></div><div class="grid-wrap"><div class="time-axis" id="timeAxis"></div><div class="days-grid" id="daysGrid"><div class="loading">Загружаю расписание…</div></div></div><div class="list-view" id="listContainer"></div><div class="empty" id="empty"><b>Ничего не найдено</b>Попробуйте сбросить фильтры или выбрать другой день.</div></div>
 </div>
@@ -115,7 +115,7 @@ let EVENTS = [];
 let currentDay = getInitialDay();
 let START_HOUR = 10;
 let END_HOUR = 22;
-let currentView = storageGet('view') || 'grid';
+let currentView = getInitialView();
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -143,10 +143,45 @@ function todayRuDay(){
   };
   return map[new Date().getDay()] || 'Понедельник';
 }
+function urlParams(){ return new URLSearchParams(location.search); }
+function initialValue(key, paramName=key){
+  const fromUrl = urlParams().get(paramName);
+  if(fromUrl !== null) return fromUrl;
+  return storageGet(key) || '';
+}
 function getInitialDay(){
-  const saved = storageGet('day');
+  const saved = initialValue('day');
   if(saved && (saved === 'all' || DAYS.includes(saved))) return saved;
   return todayRuDay();
+}
+function getInitialView(){
+  const saved = initialValue('view');
+  return saved === 'list' ? 'list' : 'grid';
+}
+function currentFilterState(){
+  return {
+    day: currentDay,
+    view: currentView,
+    q: $('search') ? $('search').value.trim() : '',
+    flow: $('audience') ? $('audience').value : '',
+    room: $('room') ? $('room').value : '',
+    type: $('type') ? $('type').value : '',
+    teacher: $('teacher') ? $('teacher').value : ''
+  };
+}
+function updateUrl(){
+  const params = new URLSearchParams(location.search);
+  const state = currentFilterState();
+  ['day','view','q','flow','room','type','teacher'].forEach(k=>params.delete(k));
+  if(state.day) params.set('day', state.day);
+  if(state.view && state.view !== 'grid') params.set('view', state.view);
+  if(state.q) params.set('q', state.q);
+  if(state.flow) params.set('flow', state.flow);
+  if(state.room) params.set('room', state.room);
+  if(state.type) params.set('type', state.type);
+  if(state.teacher) params.set('teacher', state.teacher);
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
 function saveState(){
   storageSet('day', currentDay);
@@ -156,16 +191,21 @@ function saveState(){
   if($('type')) storageSet('type', $('type').value);
   if($('room')) storageSet('room', $('room').value);
   if($('teacher')) storageSet('teacher', $('teacher').value);
+  updateUrl();
 }
 function restoreControls(){
-  if($('search')) $('search').value = storageGet('search') || '';
-  if($('audience')) $('audience').value = storageGet('audience') || '';
-  if($('type')) $('type').value = storageGet('type') || '';
-  if($('room')) $('room').value = storageGet('room') || '';
-  if($('teacher')) $('teacher').value = storageGet('teacher') || '';
+  if($('search')) $('search').value = initialValue('search','q');
+  if($('audience')) $('audience').dataset.pendingValue = initialValue('audience','flow');
+  if($('type')) $('type').dataset.pendingValue = initialValue('type','type');
+  if($('room')) $('room').dataset.pendingValue = initialValue('room','room');
+  if($('teacher')) $('teacher').dataset.pendingValue = initialValue('teacher','teacher');
 }
 function clearState(){
   ['day','view','search','audience','room','type','teacher'].forEach(storageRemove);
+  const params = new URLSearchParams(location.search);
+  ['day','view','q','flow','room','type','teacher'].forEach(k=>params.delete(k));
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
 function syncActiveDayTab(){
   document.querySelectorAll('.day-tab').forEach((x,i)=>{
@@ -200,6 +240,7 @@ async function load(){
     initStatic();
     setView(currentView, false);
     render();
+    updateUrl();
   } catch(e){
     $('setup').style.display='block';
     $('daysGrid').innerHTML='<div class="loading">Не получилось загрузить CSV. Проверь, что Google Sheet опубликован как CSV и доступен публично.</div>';
@@ -252,6 +293,17 @@ function initStatic(){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modal').classList.remove('open')});
   $('gridView').onclick=()=>setView('grid');
   $('listView').onclick=()=>setView('list');
+  $('shareLink').onclick=async()=>{
+    updateUrl();
+    const link = location.href;
+    try{ await navigator.clipboard.writeText(link); $('shareLink').textContent='Ссылка скопирована'; }
+    catch(e){ prompt('Скопируйте ссылку:', link); }
+    setTimeout(()=>{$('shareLink').textContent='Скопировать ссылку';},1600);
+  };
+  const wrap = document.querySelector('.grid-wrap');
+  if(wrap){
+    wrap.onscroll=()=>{ $('daysHeader').style.transform = `translateX(${-wrap.scrollLeft}px)`; };
+  }
 }
 
 function setView(v, shouldSave=true){
@@ -265,7 +317,7 @@ function setView(v, shouldSave=true){
 
 function fillFilters(data){
   const audSel=$('audience'), roomSel=$('room'), typeSel=$('type'), teacherSel=$('teacher');
-  const curA=audSel.value, curR=roomSel.value, curT=typeSel.value, curTeacher=teacherSel.value;
+  const curA=audSel.value || audSel.dataset.pendingValue || '', curR=roomSel.value || roomSel.dataset.pendingValue || '', curT=typeSel.value || typeSel.dataset.pendingValue || '', curTeacher=teacherSel.value || teacherSel.dataset.pendingValue || '';
   audSel.innerHTML='<option value="">Все потоки</option>';
   roomSel.innerHTML='<option value="">Все аудитории</option>';
   typeSel.innerHTML='<option value="">Все типы занятий</option>';
@@ -278,6 +330,7 @@ function fillFilters(data){
   roomSel.value=[...roomSel.options].some(o=>o.value===curR) ? curR : '';
   typeSel.value=[...typeSel.options].some(o=>o.value===curT) ? curT : '';
   teacherSel.value=[...teacherSel.options].some(o=>o.value===curTeacher) ? curTeacher : '';
+  audSel.dataset.pendingValue=''; roomSel.dataset.pendingValue=''; typeSel.dataset.pendingValue=''; teacherSel.dataset.pendingValue='';
 }
 function filtered(){ const q=$('search').value.trim().toLowerCase(), aud=$('audience').value, room=$('room').value, typ=$('type').value, teacher=$('teacher').value; return EVENTS.filter(e=>{ if(currentDay!=='all'&&e.day!==currentDay)return false; if(aud && e.calendar!==aud)return false; if(room && e.room!==room)return false; if(typ&&e.type!==typ)return false; if(teacher&&e.teacher!==teacher)return false; if(q){const blob=[e.title,e.room,e.teacher,e.calendar,e.roomAudience,e.audience,e.type,e.level,e.courseId].join(' ').toLowerCase(); if(!blob.includes(q))return false;} return true; });}
 function layoutDay(events){ events=[...events].sort((a,b)=>a.startMin-b.startMin||a.endMin-b.endMin); let groups=[], group=[], groupEnd=-1; for(const e of events){ if(group.length && e.startMin>=groupEnd){groups.push(group); group=[]; groupEnd=-1;} group.push(e); groupEnd=Math.max(groupEnd,e.endMin); } if(group.length)groups.push(group); const pos=new Map(); for(const g of groups){ let cols=[]; for(const e of g){ let c=cols.findIndex(end=>end<=e.startMin); if(c<0){c=cols.length; cols.push(e.endMin);} else cols[c]=e.endMin; pos.set(e,{col:c,total:cols.length}); } for(const e of g) pos.get(e).total=cols.length; } return pos;}
