@@ -107,8 +107,67 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
 <script>
 const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/10-djimw0_mU9A3CKhWqlM0csKjS0BHMZB6h4rLZO_tc/export?format=csv&gid=1406986454';
 const DAYS = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
-let EVENTS = []; let currentDay = getInitialDay(); let START_HOUR = 10; let END_HOUR = 22; let currentView = localStorage.getItem(STORAGE_KEY + '_view') || 'grid';
-const $=id=>document.getElementById(id); const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const STORAGE_KEY = 'cu_schedule_state';
+
+let EVENTS = [];
+let currentDay = getInitialDay();
+let START_HOUR = 10;
+let END_HOUR = 22;
+let currentView = storageGet('view') || 'grid';
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+function storageGet(key){
+  try { return localStorage.getItem(`${STORAGE_KEY}_${key}`); }
+  catch(e) { return null; }
+}
+function storageSet(key,value){
+  try { localStorage.setItem(`${STORAGE_KEY}_${key}`, value || ''); }
+  catch(e) {}
+}
+function storageRemove(key){
+  try { localStorage.removeItem(`${STORAGE_KEY}_${key}`); }
+  catch(e) {}
+}
+function todayRuDay(){
+  const map = {
+    1:'Понедельник',
+    2:'Вторник',
+    3:'Среда',
+    4:'Четверг',
+    5:'Пятница',
+    6:'Суббота'
+  };
+  return map[new Date().getDay()] || 'Понедельник';
+}
+function getInitialDay(){
+  const saved = storageGet('day');
+  if(saved && (saved === 'all' || DAYS.includes(saved))) return saved;
+  return todayRuDay();
+}
+function saveState(){
+  storageSet('day', currentDay);
+  storageSet('view', currentView);
+  if($('search')) storageSet('search', $('search').value);
+  if($('audience')) storageSet('audience', $('audience').value);
+  if($('type')) storageSet('type', $('type').value);
+}
+function restoreControls(){
+  if($('search')) $('search').value = storageGet('search') || '';
+  if($('audience')) $('audience').value = storageGet('audience') || '';
+  if($('type')) $('type').value = storageGet('type') || '';
+}
+function clearState(){
+  ['day','view','search','audience','type'].forEach(storageRemove);
+}
+function syncActiveDayTab(){
+  document.querySelectorAll('.day-tab').forEach((x,i)=>{
+    const value = i === 0 ? 'all' : DAYS[i-1];
+    x.classList.toggle('active', value === currentDay);
+  });
+}
+
 function csvUrl(){ return new URLSearchParams(location.search).get('csv') || GOOGLE_SHEET_CSV_URL; }
 function parseCSV(text){ const rows=[]; let row=[], cell='', q=false; for(let i=0;i<text.length;i++){ const c=text[i], n=text[i+1]; if(q){ if(c==='"'&&n==='"'){cell+='"';i++;} else if(c==='"') q=false; else cell+=c; } else { if(c==='"') q=true; else if(c===','){row.push(cell);cell='';} else if(c==='\n'){row.push(cell); rows.push(row); row=[]; cell='';} else if(c!=='\r') cell+=c; } } row.push(cell); rows.push(row); return rows.filter(r=>r.some(x=>String(x).trim()!=='')); }
 function normHeader(s){return String(s||'').trim().toLowerCase().replace(/\s+/g,'_');}
@@ -116,13 +175,99 @@ function excelDate(v){ if(!v) return ''; if(/^\d+(\.\d+)?$/.test(String(v))){ co
 function timeToMin(v){ let s=String(v||'').trim(); if(!s) return null; s=s.replace('.',':'); if(/^\d{3,4}$/.test(s)){s=s.padStart(4,'0'); return Number(s.slice(0,2))*60+Number(s.slice(2));} const m=s.match(/(\d{1,2}):(\d{2})/); return m?Number(m[1])*60+Number(m[2]):null; }
 function fmtTime(v){ const m=timeToMin(v); if(m==null) return ''; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
 function rowToEvent(r,i){ const get=(...keys)=>{for(const k of keys){const v=r[normHeader(k)]; if(v!==undefined && String(v).trim()!=='') return v;} return '';}; const start=get('start_time','start','начало'); const end=get('end_time','end','конец'); const startMin=timeToMin(start), endMin=timeToMin(end); const day=get('day','день'); if(!day||startMin==null||endMin==null) return null; const calendar=get('calendar','поток','аудитория_поток'); const roomAudience=get('room_audience','roomAudience','поток_по_аудитории'); return {day, dayIndex:DAYS.indexOf(day), start:fmtTime(start), end:fmtTime(end), startMin, endMin, title:get('event_title','title','курс','название'), courseId:get('course_id','courseId'), type:get('class_type','type','тип'), eventNumber:get('event_number','eventNumber'), groupNumber:get('group_number','groupNumber','группа'), level:get('level','уровень'), startDate:excelDate(get('start_date','startDate','дата_начала')), endDate:excelDate(get('end_date','endDate','дата_конца')), periodicity:get('periodicity','периодичность'), room:get('classroom','room','аудитория'), teacher:get('teacher_email','teacher','преподаватель'), calendar, roomAudience, audience:[calendar,roomAudience].filter(Boolean).join(' · '), row:i+2}; }
-async function load(){ const url=csvUrl(); if(!url){ $('setup').style.display='block'; $('daysGrid').innerHTML='<div class="loading">CSV-ссылка пока не указана.</div>'; initStatic(); return; } try{ const res=await fetch(url); if(!res.ok) throw new Error(res.status+' '+res.statusText); const rows=parseCSV(await res.text()); const headers=rows.shift().map(normHeader); EVENTS=rows.map((row,idx)=>Object.fromEntries(headers.map((h,j)=>[h,row[j]??'']))).map(rowToEvent).filter(Boolean).filter(e=>DAYS.includes(e.day)); initStatic(); render(); } catch(e){ $('setup').style.display='block'; $('daysGrid').innerHTML='<div class="loading">Не получилось загрузить CSV. Проверь, что Google Sheet опубликован как CSV и доступен публично.</div>'; console.error(e); initStatic(); } }
-function initStatic(){ $('tabs').innerHTML=''; ['Все дни',...DAYS].forEach((d,i)=>{let value=i===0?'all':d;let b=document.createElement('button');b.className='day-tab'+(value===currentDay?' active':'');b.textContent=d;b.onclick=()=>{currentDay=value;document.querySelectorAll('.day-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');render();};$('tabs').appendChild(b);}); ['search','audience','type'].forEach(id=>$(id).oninput=render); $('reset').onclick=()=>{$('search').value='';$('audience').value='';$('type').value='';currentDay='Понедельник';document.querySelectorAll('.day-tab').forEach((x,i)=>x.classList.toggle('active',i===1));render();}; $('close').onclick=()=>$('modal').classList.remove('open'); $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('open')}; document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modal').classList.remove('open')}); $('gridView').onclick=()=>setView('grid'); $('listView').onclick=()=>setView('list'); }
-function setView(v){ currentView=v; $('calendarShell').classList.toggle('list-mode',v==='list'); $('calendarShell').classList.toggle('grid-forced',v==='grid'); $('gridView').classList.toggle('active',v==='grid'); $('listView').classList.toggle('active',v==='list'); }
-function fillFilters(data){ const audSel=$('audience'), typeSel=$('type'); const curA=audSel.value, curT=typeSel.value; audSel.innerHTML='<option value="">Все потоки / аудитории</option>'; typeSel.innerHTML='<option value="">Все типы занятий</option>'; [...new Set(data.flatMap(e=>[e.calendar,e.roomAudience,e.audience]).filter(Boolean))].sort().forEach(a=>{let o=document.createElement('option');o.value=a;o.textContent=a;audSel.appendChild(o);}); [...new Set(data.map(e=>e.type).filter(Boolean))].sort().forEach(t=>{let o=document.createElement('option');o.value=t;o.textContent=t;typeSel.appendChild(o);}); audSel.value=curA; typeSel.value=curT; }
+
+async function load(){
+  const url=csvUrl();
+  if(!url){
+    $('setup').style.display='block';
+    $('daysGrid').innerHTML='<div class="loading">CSV-ссылка пока не указана.</div>';
+    initStatic();
+    setView(currentView, false);
+    return;
+  }
+  try{
+    const res=await fetch(url);
+    if(!res.ok) throw new Error(res.status+' '+res.statusText);
+    const rows=parseCSV(await res.text());
+    const headers=rows.shift().map(normHeader);
+    EVENTS=rows.map((row,idx)=>Object.fromEntries(headers.map((h,j)=>[h,row[j]??'']))).map(rowToEvent).filter(Boolean).filter(e=>DAYS.includes(e.day));
+    initStatic();
+    setView(currentView, false);
+    render();
+  } catch(e){
+    $('setup').style.display='block';
+    $('daysGrid').innerHTML='<div class="loading">Не получилось загрузить CSV. Проверь, что Google Sheet опубликован как CSV и доступен публично.</div>';
+    console.error(e);
+    initStatic();
+    setView(currentView, false);
+  }
+}
+
+function initStatic(){
+  $('tabs').innerHTML='';
+  ['Все дни',...DAYS].forEach((d,i)=>{
+    let value=i===0?'all':d;
+    let b=document.createElement('button');
+    b.className='day-tab'+(value===currentDay?' active':'');
+    b.textContent=d;
+    b.onclick=()=>{
+      currentDay=value;
+      syncActiveDayTab();
+      saveState();
+      render();
+    };
+    $('tabs').appendChild(b);
+  });
+
+  restoreControls();
+  syncActiveDayTab();
+
+  ['search','audience','type'].forEach(id=>$(id).oninput=()=>{
+    saveState();
+    render();
+  });
+
+  $('reset').onclick=()=>{
+    clearState();
+    $('search').value='';
+    $('audience').value='';
+    $('type').value='';
+    currentDay=todayRuDay();
+    currentView='grid';
+    syncActiveDayTab();
+    setView('grid');
+    render();
+  };
+
+  $('close').onclick=()=>$('modal').classList.remove('open');
+  $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('open')};
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modal').classList.remove('open')});
+  $('gridView').onclick=()=>setView('grid');
+  $('listView').onclick=()=>setView('list');
+}
+
+function setView(v, shouldSave=true){
+  currentView=v;
+  $('calendarShell').classList.toggle('list-mode',v==='list');
+  $('calendarShell').classList.toggle('grid-forced',v==='grid');
+  $('gridView').classList.toggle('active',v==='grid');
+  $('listView').classList.toggle('active',v==='list');
+  if(shouldSave) saveState();
+}
+
+function fillFilters(data){
+  const audSel=$('audience'), typeSel=$('type');
+  const curA=audSel.value, curT=typeSel.value;
+  audSel.innerHTML='<option value="">Все потоки / аудитории</option>';
+  typeSel.innerHTML='<option value="">Все типы занятий</option>';
+  [...new Set(data.flatMap(e=>[e.calendar,e.roomAudience,e.audience]).filter(Boolean))].sort().forEach(a=>{let o=document.createElement('option');o.value=a;o.textContent=a;audSel.appendChild(o);});
+  [...new Set(data.map(e=>e.type).filter(Boolean))].sort().forEach(t=>{let o=document.createElement('option');o.value=t;o.textContent=t;typeSel.appendChild(o);});
+  audSel.value=[...audSel.options].some(o=>o.value===curA) ? curA : '';
+  typeSel.value=[...typeSel.options].some(o=>o.value===curT) ? curT : '';
+}
 function filtered(){ const q=$('search').value.trim().toLowerCase(), aud=$('audience').value, typ=$('type').value; return EVENTS.filter(e=>{ if(currentDay!=='all'&&e.day!==currentDay)return false; if(aud && !((e.calendar||'').includes(aud)||(e.roomAudience||'').includes(aud)||(e.audience||'').includes(aud)))return false; if(typ&&e.type!==typ)return false; if(q){const blob=[e.title,e.room,e.teacher,e.calendar,e.roomAudience,e.audience,e.type,e.level,e.courseId].join(' ').toLowerCase(); if(!blob.includes(q))return false;} return true; });}
 function layoutDay(events){ events=[...events].sort((a,b)=>a.startMin-b.startMin||a.endMin-b.endMin); let groups=[], group=[], groupEnd=-1; for(const e of events){ if(group.length && e.startMin>=groupEnd){groups.push(group); group=[]; groupEnd=-1;} group.push(e); groupEnd=Math.max(groupEnd,e.endMin); } if(group.length)groups.push(group); const pos=new Map(); for(const g of groups){ let cols=[]; for(const e of g){ let c=cols.findIndex(end=>end<=e.startMin); if(c<0){c=cols.length; cols.push(e.endMin);} else cols[c]=e.endMin; pos.set(e,{col:c,total:cols.length}); } for(const e of g) pos.get(e).total=cols.length; } return pos;}
-function renderActiveFilters(){ const chips=[]; const q=$('search').value.trim(), aud=$('audience').value, typ=$('type').value; if(currentDay!=='all') chips.push(['day',currentDay]); if(q) chips.push(['search','Поиск: '+q]); if(aud) chips.push(['audience',aud]); if(typ) chips.push(['type',typ]); $('activeFilters').innerHTML=chips.map(([k,v])=>`<span class="filter-chip">${esc(v)} <button aria-label="Убрать фильтр" data-k="${k}">×</button></span>`).join(''); $('activeFilters').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(k==='day'){currentDay='all';document.querySelectorAll('.day-tab').forEach((x,i)=>x.classList.toggle('active',i===0));} if(k==='search')$('search').value=''; if(k==='audience')$('audience').value=''; if(k==='type')$('type').value=''; render(); }); }
+function renderActiveFilters(){ const chips=[]; const q=$('search').value.trim(), aud=$('audience').value, typ=$('type').value; if(currentDay!=='all') chips.push(['day',currentDay]); if(q) chips.push(['search','Поиск: '+q]); if(aud) chips.push(['audience',aud]); if(typ) chips.push(['type',typ]); $('activeFilters').innerHTML=chips.map(([k,v])=>`<span class="filter-chip">${esc(v)} <button aria-label="Убрать фильтр" data-k="${k}">×</button></span>`).join(''); $('activeFilters').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(k==='day'){currentDay='all';syncActiveDayTab();} if(k==='search')$('search').value=''; if(k==='audience')$('audience').value=''; if(k==='type')$('type').value=''; saveState(); render(); }); }
 function renderList(data, visibleDays){ $('listContainer').innerHTML=visibleDays.map(day=>{ const evs=data.filter(e=>e.day===day).sort((a,b)=>a.startMin-b.startMin); if(!evs.length) return ''; return `<div class="list-day"><h3>${esc(day)} · ${evs.length} ${plural(evs.length,'событие','события','событий')}</h3>${evs.map(e=>`<div class="list-card" data-row="${e.row}"><div class="list-time">${esc(e.start)}–${esc(e.end)}</div><div><div class="list-title">${esc(e.title)}</div><div class="list-meta">${esc([e.type,e.room,e.calendar||e.roomAudience,e.teacher].filter(Boolean).join(' · '))}</div></div></div>`).join('')}</div>`; }).join('') || '<div class="empty" style="display:block"><b>Ничего не найдено</b>Попробуйте сбросить фильтры или выбрать другой день.</div>'; $('listContainer').querySelectorAll('.list-card').forEach(card=>{ const e=data.find(x=>String(x.row)===card.dataset.row); if(e) card.onclick=()=>openModal(e); }); }
 function plural(n,a,b,c){ n=Math.abs(n)%100; const n1=n%10; if(n>10&&n<20)return c; if(n1>1&&n1<5)return b; if(n1===1)return a; return c; }
 function render(){ fillFilters(EVENTS); const data=filtered(); $('countAll').textContent=data.length; $('countVisibleDays').textContent=(currentDay==='all'?DAYS.length:1); $('countVisibleDays').parentElement.lastChild.textContent=(currentDay==='all'?' дней':' день'); $('empty').style.display=data.length?'none':'block'; renderActiveFilters(); const allMins=EVENTS.flatMap(e=>[e.startMin,e.endMin]).filter(Number.isFinite); if(allMins.length){START_HOUR=Math.max(0,Math.floor(Math.min(...allMins)/60)); END_HOUR=Math.min(24,Math.ceil(Math.max(...allMins)/60));} document.documentElement.style.setProperty('--hours', END_HOUR-START_HOUR); $('timePill').textContent=`${String(START_HOUR).padStart(2,'0')}:00–${String(END_HOUR).padStart(2,'0')}:00`; const visibleDays=currentDay==='all'?DAYS:[currentDay]; document.documentElement.style.setProperty('--visible-days',visibleDays.length); document.documentElement.style.setProperty('--grid-min',currentDay==='all'?'1220px':'760px'); $('daysHeader').innerHTML='<div class="corner"></div>'+visibleDays.map(d=>{ const n=data.filter(e=>e.day===d).length; return `<div class="day-head"><span>${esc(d)}</span><span class="day-count">${n} ${plural(n,'занятие','занятия','занятий')}</span></div>`; }).join(''); $('timeAxis').innerHTML=''; for(let h=START_HOUR; h<=END_HOUR; h++){let lab=document.createElement('div');lab.className='time-label';lab.style.top=((h-START_HOUR)*82)+'px';lab.textContent=String(h).padStart(2,'0')+':00';$('timeAxis').appendChild(lab);} $('daysGrid').innerHTML=''; visibleDays.forEach(day=>{ const col=document.createElement('div'); col.className='day-col'; const evs=data.filter(e=>e.day===day); const pos=layoutDay(evs); evs.forEach(e=>{ const p=pos.get(e)||{col:0,total:1}; const top=((e.startMin-START_HOUR*60)/60)*82+5; const height=Math.max(((e.endMin-e.startMin)/60)*82-10,44); const gap=4, width=(100/p.total), left=p.col*width; const card=document.createElement('div'); card.className='event '+(((e.audience||'').includes('Бак')||(e.roomAudience||'').includes('Бак'))?'bak ':'')+(p.total>4||height<58?'dense':''); card.style.top=top+'px'; card.style.height=height+'px'; card.style.left=`calc(${left}% + ${gap}px)`; card.style.width=`calc(${width}% - ${gap*2}px)`; card.innerHTML=`<div class="event-title">${esc(e.title)}</div><div class="event-meta">${esc(e.start)}–${esc(e.end)} · ${esc(e.room||'ауд. не указана')}</div><div class="event-meta">${esc(e.calendar||e.roomAudience||'')}</div><div class="badge-row">${e.type?`<span class="badge">${esc(e.type)}</span>`:''}${(e.audience||'').includes('Бак')?`<span class="badge dark">Бак</span>`:''}${e.level?`<span class="badge">${esc(e.level)}</span>`:''}</div>`; card.onclick=()=>openModal(e); col.appendChild(card); }); $('daysGrid').appendChild(col); }); renderList(data, visibleDays); }
