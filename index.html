@@ -87,7 +87,13 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
   .app{padding:18px}.hero{display:block}h1{font-size:32px}.pills{justify-content:flex-start;margin-top:14px}.controls{grid-template-columns:1fr;position:static;border-radius:22px}.reset{align-self:auto}.meta-row{align-items:flex-start;flex-direction:column}.day-tabs{overflow:auto;flex-wrap:nowrap;width:100%;padding-bottom:2px}.day-tab{white-space:nowrap}.calendar-shell{border-radius:24px}.grid-wrap{max-height:68vh}.event-title{font-size:11px}.detail-grid{grid-template-columns:1fr;gap:3px}.detail-grid div:nth-child(even){margin-bottom:8px}.list-card{grid-template-columns:1fr;gap:8px}
 }
 @media(max-width:640px){
-  .pills .pill{font-size:12px;padding:8px 10px}.view-switch{width:100%}.view-btn{flex:1}.share-link{width:100%}.calendar-shell:not(.grid-forced) .days-header,.calendar-shell:not(.grid-forced) .grid-wrap{display:none}.calendar-shell:not(.grid-forced) .list-view{display:block}
+  .pills .pill{font-size:12px;padding:8px 10px}
+  .meta-row{gap:10px}
+  .day-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;overflow:visible;flex-wrap:unset;width:100%;padding-bottom:0}
+  .day-tab{width:100%;padding:10px 6px;font-size:0;text-align:center;white-space:nowrap}
+  .day-tab::after{content:attr(data-short);font-size:13px;font-weight:850}
+  .view-switch{width:100%}.view-btn{flex:1}.share-link{width:100%}
+  .calendar-shell:not(.grid-forced) .days-header,.calendar-shell:not(.grid-forced) .grid-wrap{display:none}.calendar-shell:not(.grid-forced) .list-view{display:block}
 }
 </style></head>
 <body><div class="app">
@@ -109,7 +115,7 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
 <div class="modal" id="modal"><div class="modal-card"><h2 class="modal-title" id="modalTitle"></h2><div class="detail-grid" id="modalDetails"></div><button class="close" id="close">Закрыть</button></div></div>
 <script>
 const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/10-djimw0_mU9A3CKhWqlM0csKjS0BHMZB6h4rLZO_tc/export?format=csv&gid=1406986454';
-const DAYS = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+const DAYS = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
 const STORAGE_KEY = 'cu_schedule_state';
 
 let EVENTS = [];
@@ -124,7 +130,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&
 function storageGet(key){ try { return localStorage.getItem(`${STORAGE_KEY}_${key}`); } catch(e) { return null; } }
 function storageSet(key,value){ try { localStorage.setItem(`${STORAGE_KEY}_${key}`, value || ''); } catch(e) {} }
 function storageRemove(key){ try { localStorage.removeItem(`${STORAGE_KEY}_${key}`); } catch(e) {} }
-function todayRuDay(){ const map={1:'Понедельник',2:'Вторник',3:'Среда',4:'Четверг',5:'Пятница',6:'Суббота'}; return map[new Date().getDay()] || 'Понедельник'; }
+function todayRuDay(){ const map={0:'Воскресенье',1:'Понедельник',2:'Вторник',3:'Среда',4:'Четверг',5:'Пятница',6:'Суббота'}; return map[new Date().getDay()] || 'Понедельник'; }
 function urlParams(){ return new URLSearchParams(location.search); }
 function initialValue(key, paramName=key){ const fromUrl=urlParams().get(paramName); if(fromUrl!==null) return fromUrl; return storageGet(key) || ''; }
 function parseDaysValue(value){
@@ -195,7 +201,7 @@ async function load(){
 
 function initStatic(){
   $('tabs').innerHTML='';
-  ['Все дни',...DAYS].forEach((d,i)=>{ const value=i===0?'all':d; const b=document.createElement('button'); b.type='button'; b.className='day-tab'; b.textContent=d; b.onclick=()=>{ if(value==='all'){ selectedDays=[...DAYS]; } else { const set=new Set(selectedDays); set.has(value) ? set.delete(value) : set.add(value); selectedDays=[...DAYS].filter(day=>set.has(day)); if(!selectedDays.length) selectedDays=[value]; } syncActiveDayTab(); saveState(); render(); }; $('tabs').appendChild(b); });
+  ['Все дни',...DAYS].forEach((d,i)=>{ const value=i===0?'all':d; const b=document.createElement('button'); b.type='button'; b.className='day-tab'; b.textContent=d; b.dataset.short=i===0?'Все':({'Понедельник':'Пн','Вторник':'Вт','Среда':'Ср','Четверг':'Чт','Пятница':'Пт','Суббота':'Сб','Воскресенье':'Вс'}[d] || d.slice(0,2)); b.onclick=()=>{ if(value==='all'){ selectedDays=[...DAYS]; } else { const set=new Set(selectedDays); set.has(value) ? set.delete(value) : set.add(value); selectedDays=[...DAYS].filter(day=>set.has(day)); if(!selectedDays.length) selectedDays=[value]; } syncActiveDayTab(); saveState(); render(); }; $('tabs').appendChild(b); });
   restoreControls(); syncActiveDayTab();
   ['search','course','audience','room','type','teacher'].forEach(id=>$(id).oninput=()=>{ saveState(); render(); });
   $('reset').onclick=()=>{ clearState(); $('search').value=''; $('course').value=''; $('audience').value=''; $('room').value=''; $('type').value=''; $('teacher').value=''; selectedDays=[todayRuDay()]; currentView='grid'; syncActiveDayTab(); setView('grid'); render(); };
