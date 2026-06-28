@@ -21,7 +21,7 @@ h1{margin:0;font-size:36px;letter-spacing:-.045em;line-height:1.04}
 .pill{background:rgba(255,255,255,.86);border:1px solid var(--line);border-radius:999px;padding:9px 13px;font-size:13px;box-shadow:var(--shadow-sm);white-space:nowrap}
 .setup{display:none;margin-bottom:16px;background:#fff8e7;border:1px solid #f0d58a;border-radius:20px;padding:14px;color:#5c4510;font-size:14px}
 .setup code{background:rgba(255,255,255,.75);padding:2px 5px;border-radius:6px}
-.controls{display:grid;grid-template-columns:1.25fr .85fr .85fr .85fr .95fr auto;gap:12px;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:26px;padding:14px;box-shadow:var(--shadow);position:sticky;top:12px;z-index:60}
+.controls{display:grid;grid-template-columns:1.2fr 1fr .85fr .85fr .85fr .95fr auto;gap:12px;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:26px;padding:14px;box-shadow:var(--shadow);position:sticky;top:12px;z-index:60}
 .field{display:flex;flex-direction:column;gap:6px;min-width:0}
 label{font-size:11px;line-height:1;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:850;padding-left:4px}
 input,select,button{width:100%;border:1px solid var(--line);background:#fff;border-radius:16px;padding:12px 14px;font-size:14px;outline:none;color:var(--ink)}
@@ -91,10 +91,11 @@ button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(20,33,43,.14
 }
 </style></head>
 <body><div class="app">
-  <div class="hero"><div><h1>Расписание</h1><div class="subtitle" id="subtitle">Смотрите по дням, фильтруйте по потоку, типу занятия или поиску</div></div><div class="pills"><div class="pill"><b id="countAll">0</b> событий</div><div class="pill"><b id="countVisibleDays">1</b> день</div><div class="pill" id="timePill">9:00–23:00</div></div></div>
+  <div class="hero"><div><h1>Расписание</h1><div class="subtitle" id="subtitle">Выбирайте один или несколько дней, фильтруйте по курсу, потоку, аудитории и преподавателю</div></div><div class="pills"><div class="pill"><b id="countAll">0</b> событий</div><div class="pill"><b id="countVisibleDays">1</b> день</div><div class="pill" id="timePill">9:00–23:00</div></div></div>
   <div class="setup" id="setup">Вставь ссылку на опубликованный CSV в коде: <code>GOOGLE_SHEET_CSV_URL</code>. Либо открой файл так: <code>?csv=https://docs.google.com/...</code></div>
   <div class="controls">
     <div class="field"><label for="search">Поиск</label><input id="search" placeholder="Курс, аудитория, преподаватель, поток…"></div>
+    <div class="field"><label for="course">Курс</label><select id="course"><option value="">Все курсы</option></select></div>
     <div class="field"><label for="audience">Поток</label><select id="audience"><option value="">Все потоки</option></select></div>
     <div class="field"><label for="room">Аудитория</label><select id="room"><option value="">Все аудитории</option></select></div>
     <div class="field"><label for="type">Тип занятия</label><select id="type"><option value="">Все типы занятий</option></select></div>
@@ -112,7 +113,7 @@ const DAYS = ['Понедельник','Вторник','Среда','Четве
 const STORAGE_KEY = 'cu_schedule_state';
 
 let EVENTS = [];
-let currentDay = getInitialDay();
+let selectedDays = getInitialDays();
 let START_HOUR = 10;
 let END_HOUR = 22;
 let currentView = getInitialView();
@@ -120,99 +121,62 @@ let currentView = getInitialView();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-function storageGet(key){
-  try { return localStorage.getItem(`${STORAGE_KEY}_${key}`); }
-  catch(e) { return null; }
-}
-function storageSet(key,value){
-  try { localStorage.setItem(`${STORAGE_KEY}_${key}`, value || ''); }
-  catch(e) {}
-}
-function storageRemove(key){
-  try { localStorage.removeItem(`${STORAGE_KEY}_${key}`); }
-  catch(e) {}
-}
-function todayRuDay(){
-  const map = {
-    1:'Понедельник',
-    2:'Вторник',
-    3:'Среда',
-    4:'Четверг',
-    5:'Пятница',
-    6:'Суббота'
-  };
-  return map[new Date().getDay()] || 'Понедельник';
-}
+function storageGet(key){ try { return localStorage.getItem(`${STORAGE_KEY}_${key}`); } catch(e) { return null; } }
+function storageSet(key,value){ try { localStorage.setItem(`${STORAGE_KEY}_${key}`, value || ''); } catch(e) {} }
+function storageRemove(key){ try { localStorage.removeItem(`${STORAGE_KEY}_${key}`); } catch(e) {} }
+function todayRuDay(){ const map={1:'Понедельник',2:'Вторник',3:'Среда',4:'Четверг',5:'Пятница',6:'Суббота'}; return map[new Date().getDay()] || 'Понедельник'; }
 function urlParams(){ return new URLSearchParams(location.search); }
-function initialValue(key, paramName=key){
-  const fromUrl = urlParams().get(paramName);
-  if(fromUrl !== null) return fromUrl;
-  return storageGet(key) || '';
+function initialValue(key, paramName=key){ const fromUrl=urlParams().get(paramName); if(fromUrl!==null) return fromUrl; return storageGet(key) || ''; }
+function parseDaysValue(value){
+  if(!value) return [];
+  if(value === 'all') return [...DAYS];
+  return String(value).split(',').map(x=>decodeURIComponent(x).trim()).filter(d=>DAYS.includes(d));
 }
-function getInitialDay(){
-  const saved = initialValue('day');
-  if(saved && (saved === 'all' || DAYS.includes(saved))) return saved;
-  return todayRuDay();
+function getInitialDays(){
+  const fromUrl = urlParams().get('days') ?? urlParams().get('day');
+  const saved = fromUrl !== null ? fromUrl : (storageGet('days') || storageGet('day') || '');
+  const parsed = parseDaysValue(saved);
+  return parsed.length ? [...new Set(parsed)] : [todayRuDay()];
 }
-function getInitialView(){
-  const saved = initialValue('view');
-  return saved === 'list' ? 'list' : 'grid';
-}
-function currentFilterState(){
-  return {
-    day: currentDay,
-    view: currentView,
-    q: $('search') ? $('search').value.trim() : '',
-    flow: $('audience') ? $('audience').value : '',
-    room: $('room') ? $('room').value : '',
-    type: $('type') ? $('type').value : '',
-    teacher: $('teacher') ? $('teacher').value : ''
-  };
-}
+function getInitialView(){ const saved=initialValue('view'); return saved === 'list' ? 'list' : 'grid'; }
+function allDaysSelected(){ return selectedDays.length === DAYS.length && DAYS.every(d=>selectedDays.includes(d)); }
+function visibleDays(){ return allDaysSelected() ? DAYS : DAYS.filter(d=>selectedDays.includes(d)); }
+function selectedDaysLabel(){ return allDaysSelected() ? 'Все дни' : visibleDays().join(', '); }
+function currentFilterState(){ return { days: allDaysSelected() ? 'all' : visibleDays().join(','), view: currentView, q: $('search')?.value.trim() || '', course: $('course')?.value || '', flow: $('audience')?.value || '', room: $('room')?.value || '', type: $('type')?.value || '', teacher: $('teacher')?.value || '' }; }
 function updateUrl(){
-  const params = new URLSearchParams(location.search);
-  const state = currentFilterState();
-  ['day','view','q','flow','room','type','teacher'].forEach(k=>params.delete(k));
-  if(state.day) params.set('day', state.day);
+  const params=new URLSearchParams(location.search); const state=currentFilterState();
+  ['day','days','view','q','course','flow','room','type','teacher'].forEach(k=>params.delete(k));
+  if(state.days) params.set('days', state.days);
   if(state.view && state.view !== 'grid') params.set('view', state.view);
   if(state.q) params.set('q', state.q);
+  if(state.course) params.set('course', state.course);
   if(state.flow) params.set('flow', state.flow);
   if(state.room) params.set('room', state.room);
   if(state.type) params.set('type', state.type);
   if(state.teacher) params.set('teacher', state.teacher);
-  const qs = params.toString();
-  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  const qs=params.toString(); history.replaceState(null,'',location.pathname+(qs?'?'+qs:'')+location.hash);
 }
 function saveState(){
-  storageSet('day', currentDay);
+  storageSet('days', allDaysSelected() ? 'all' : visibleDays().join(','));
   storageSet('view', currentView);
-  if($('search')) storageSet('search', $('search').value);
-  if($('audience')) storageSet('audience', $('audience').value);
-  if($('type')) storageSet('type', $('type').value);
-  if($('room')) storageSet('room', $('room').value);
-  if($('teacher')) storageSet('teacher', $('teacher').value);
+  if($('search')) storageSet('search',$('search').value);
+  if($('course')) storageSet('course',$('course').value);
+  if($('audience')) storageSet('audience',$('audience').value);
+  if($('room')) storageSet('room',$('room').value);
+  if($('type')) storageSet('type',$('type').value);
+  if($('teacher')) storageSet('teacher',$('teacher').value);
   updateUrl();
 }
 function restoreControls(){
-  if($('search')) $('search').value = initialValue('search','q');
-  if($('audience')) $('audience').dataset.pendingValue = initialValue('audience','flow');
-  if($('type')) $('type').dataset.pendingValue = initialValue('type','type');
-  if($('room')) $('room').dataset.pendingValue = initialValue('room','room');
-  if($('teacher')) $('teacher').dataset.pendingValue = initialValue('teacher','teacher');
+  if($('search')) $('search').value=initialValue('search','q');
+  if($('course')) $('course').dataset.pendingValue=initialValue('course','course');
+  if($('audience')) $('audience').dataset.pendingValue=initialValue('audience','flow');
+  if($('room')) $('room').dataset.pendingValue=initialValue('room','room');
+  if($('type')) $('type').dataset.pendingValue=initialValue('type','type');
+  if($('teacher')) $('teacher').dataset.pendingValue=initialValue('teacher','teacher');
 }
-function clearState(){
-  ['day','view','search','audience','room','type','teacher'].forEach(storageRemove);
-  const params = new URLSearchParams(location.search);
-  ['day','view','q','flow','room','type','teacher'].forEach(k=>params.delete(k));
-  const qs = params.toString();
-  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-}
-function syncActiveDayTab(){
-  document.querySelectorAll('.day-tab').forEach((x,i)=>{
-    const value = i === 0 ? 'all' : DAYS[i-1];
-    x.classList.toggle('active', value === currentDay);
-  });
-}
+function clearState(){ ['day','days','view','search','course','audience','room','type','teacher'].forEach(storageRemove); const params=new URLSearchParams(location.search); ['day','days','view','q','course','flow','room','type','teacher'].forEach(k=>params.delete(k)); const qs=params.toString(); history.replaceState(null,'',location.pathname+(qs?'?'+qs:'')+location.hash); }
+function syncActiveDayTab(){ document.querySelectorAll('.day-tab').forEach((x,i)=>{ const value=i===0?'all':DAYS[i-1]; x.classList.toggle('active', value==='all' ? allDaysSelected() : selectedDays.includes(value)); }); }
 
 function csvUrl(){ return new URLSearchParams(location.search).get('csv') || GOOGLE_SHEET_CSV_URL; }
 function parseCSV(text){ const rows=[]; let row=[], cell='', q=false; for(let i=0;i<text.length;i++){ const c=text[i], n=text[i+1]; if(q){ if(c==='"'&&n==='"'){cell+='"';i++;} else if(c==='"') q=false; else cell+=c; } else { if(c==='"') q=true; else if(c===','){row.push(cell);cell='';} else if(c==='\n'){row.push(cell); rows.push(row); row=[]; cell='';} else if(c!=='\r') cell+=c; } } row.push(cell); rows.push(row); return rows.filter(r=>r.some(x=>String(x).trim()!=='')); }
@@ -220,124 +184,48 @@ function normHeader(s){return String(s||'').trim().toLowerCase().replace(/\s+/g,
 function excelDate(v){ if(!v) return ''; if(/^\d+(\.\d+)?$/.test(String(v))){ const d=new Date(Math.round((Number(v)-25569)*86400*1000)); return d.toLocaleDateString('ru-RU'); } return String(v); }
 function timeToMin(v){ let s=String(v||'').trim(); if(!s) return null; s=s.replace('.',':'); if(/^\d{3,4}$/.test(s)){s=s.padStart(4,'0'); return Number(s.slice(0,2))*60+Number(s.slice(2));} const m=s.match(/(\d{1,2}):(\d{2})/); return m?Number(m[1])*60+Number(m[2]):null; }
 function fmtTime(v){ const m=timeToMin(v); if(m==null) return ''; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
-function rowToEvent(r,i){ const get=(...keys)=>{for(const k of keys){const v=r[normHeader(k)]; if(v!==undefined && String(v).trim()!=='') return v;} return '';}; const start=get('start_time','start','начало'); const end=get('end_time','end','конец'); const startMin=timeToMin(start), endMin=timeToMin(end); const day=get('day','день'); if(!day||startMin==null||endMin==null) return null; const calendar=get('calendar','поток','аудитория_поток'); const roomAudience=get('room_audience','roomAudience','поток_по_аудитории'); return {day, dayIndex:DAYS.indexOf(day), start:fmtTime(start), end:fmtTime(end), startMin, endMin, title:get('event_title','title','курс','название'), courseId:get('course_id','courseId'), type:get('class_type','type','тип'), eventNumber:get('event_number','eventNumber'), groupNumber:get('group_number','groupNumber','группа'), level:get('level','уровень'), startDate:excelDate(get('start_date','startDate','дата_начала')), endDate:excelDate(get('end_date','endDate','дата_конца')), periodicity:get('periodicity','периодичность'), room:get('classroom','room','аудитория'), teacher:get('teacher_email','teacher','преподаватель'), calendar, roomAudience, audience:[calendar,roomAudience].filter(Boolean).join(' · '), row:i+2}; }
+function rowToEvent(r,i){ const get=(...keys)=>{for(const k of keys){const v=r[normHeader(k)]; if(v!==undefined && String(v).trim()!=='') return v;} return '';}; const start=get('start_time','start','начало'); const end=get('end_time','end','конец'); const startMin=timeToMin(start), endMin=timeToMin(end); const day=get('day','день'); if(!day||startMin==null||endMin==null) return null; const calendar=get('calendar','поток','аудитория_поток'); const roomAudience=get('room_audience','roomAudience','поток_по_аудитории'); const title=get('event_title','title','курс','название'); const courseId=get('course_id','courseId'); return {day, dayIndex:DAYS.indexOf(day), start:fmtTime(start), end:fmtTime(end), startMin, endMin, title, courseId, courseLabel:[title, courseId].filter(Boolean).join(' · '), type:get('class_type','type','тип'), eventNumber:get('event_number','eventNumber'), groupNumber:get('group_number','groupNumber','группа'), level:get('level','уровень'), startDate:excelDate(get('start_date','startDate','дата_начала')), endDate:excelDate(get('end_date','endDate','дата_конца')), periodicity:get('periodicity','периодичность'), room:get('classroom','room','аудитория'), teacher:get('teacher_email','teacher','преподаватель'), calendar, roomAudience, audience:[calendar,roomAudience].filter(Boolean).join(' · '), row:i+2}; }
 
 async function load(){
   const url=csvUrl();
-  if(!url){
-    $('setup').style.display='block';
-    $('daysGrid').innerHTML='<div class="loading">CSV-ссылка пока не указана.</div>';
-    initStatic();
-    setView(currentView, false);
-    return;
-  }
-  try{
-    const res=await fetch(url);
-    if(!res.ok) throw new Error(res.status+' '+res.statusText);
-    const rows=parseCSV(await res.text());
-    const headers=rows.shift().map(normHeader);
-    EVENTS=rows.map((row,idx)=>Object.fromEntries(headers.map((h,j)=>[h,row[j]??'']))).map(rowToEvent).filter(Boolean).filter(e=>DAYS.includes(e.day));
-    initStatic();
-    setView(currentView, false);
-    render();
-    updateUrl();
-  } catch(e){
-    $('setup').style.display='block';
-    $('daysGrid').innerHTML='<div class="loading">Не получилось загрузить CSV. Проверь, что Google Sheet опубликован как CSV и доступен публично.</div>';
-    console.error(e);
-    initStatic();
-    setView(currentView, false);
-  }
+  if(!url){ $('setup').style.display='block'; $('daysGrid').innerHTML='<div class="loading">CSV-ссылка пока не указана.</div>'; initStatic(); setView(currentView,false); return; }
+  try{ const res=await fetch(url); if(!res.ok) throw new Error(res.status+' '+res.statusText); const rows=parseCSV(await res.text()); const headers=rows.shift().map(normHeader); EVENTS=rows.map((row,idx)=>Object.fromEntries(headers.map((h,j)=>[h,row[j]??'']))).map(rowToEvent).filter(Boolean).filter(e=>DAYS.includes(e.day)); initStatic(); setView(currentView,false); render(); updateUrl(); }
+  catch(e){ $('setup').style.display='block'; $('daysGrid').innerHTML='<div class="loading">Не получилось загрузить CSV. Проверь, что Google Sheet опубликован как CSV и доступен публично.</div>'; console.error(e); initStatic(); setView(currentView,false); }
 }
 
 function initStatic(){
   $('tabs').innerHTML='';
-  ['Все дни',...DAYS].forEach((d,i)=>{
-    let value=i===0?'all':d;
-    let b=document.createElement('button');
-    b.className='day-tab'+(value===currentDay?' active':'');
-    b.textContent=d;
-    b.onclick=()=>{
-      currentDay=value;
-      syncActiveDayTab();
-      saveState();
-      render();
-    };
-    $('tabs').appendChild(b);
-  });
-
-  restoreControls();
-  syncActiveDayTab();
-
-  ['search','audience','room','type','teacher'].forEach(id=>$(id).oninput=()=>{
-    saveState();
-    render();
-  });
-
-  $('reset').onclick=()=>{
-    clearState();
-    $('search').value='';
-    $('audience').value='';
-    $('type').value='';
-    $('room').value='';
-    $('teacher').value='';
-    currentDay=todayRuDay();
-    currentView='grid';
-    syncActiveDayTab();
-    setView('grid');
-    render();
-  };
-
+  ['Все дни',...DAYS].forEach((d,i)=>{ const value=i===0?'all':d; const b=document.createElement('button'); b.type='button'; b.className='day-tab'; b.textContent=d; b.onclick=()=>{ if(value==='all'){ selectedDays=[...DAYS]; } else { const set=new Set(selectedDays); set.has(value) ? set.delete(value) : set.add(value); selectedDays=[...DAYS].filter(day=>set.has(day)); if(!selectedDays.length) selectedDays=[value]; } syncActiveDayTab(); saveState(); render(); }; $('tabs').appendChild(b); });
+  restoreControls(); syncActiveDayTab();
+  ['search','course','audience','room','type','teacher'].forEach(id=>$(id).oninput=()=>{ saveState(); render(); });
+  $('reset').onclick=()=>{ clearState(); $('search').value=''; $('course').value=''; $('audience').value=''; $('room').value=''; $('type').value=''; $('teacher').value=''; selectedDays=[todayRuDay()]; currentView='grid'; syncActiveDayTab(); setView('grid'); render(); };
   $('close').onclick=()=>$('modal').classList.remove('open');
   $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('open')};
   document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modal').classList.remove('open')});
-  $('gridView').onclick=()=>setView('grid');
-  $('listView').onclick=()=>setView('list');
-  $('shareLink').onclick=async()=>{
-    updateUrl();
-    const link = location.href;
-    try{ await navigator.clipboard.writeText(link); $('shareLink').textContent='Ссылка скопирована'; }
-    catch(e){ prompt('Скопируйте ссылку:', link); }
-    setTimeout(()=>{$('shareLink').textContent='Скопировать ссылку';},1600);
-  };
-  const wrap = document.querySelector('.grid-wrap');
-  if(wrap){
-    wrap.onscroll=()=>{ $('daysHeader').style.transform = `translateX(${-wrap.scrollLeft}px)`; };
-  }
+  $('gridView').onclick=()=>setView('grid'); $('listView').onclick=()=>setView('list');
+  $('shareLink').onclick=async()=>{ updateUrl(); const link=location.href; try{ await navigator.clipboard.writeText(link); $('shareLink').textContent='Ссылка скопирована'; } catch(e){ prompt('Скопируйте ссылку:', link); } setTimeout(()=>{$('shareLink').textContent='Скопировать ссылку';},1600); };
+  const wrap=document.querySelector('.grid-wrap'); if(wrap){ wrap.onscroll=()=>{ $('daysHeader').style.transform=`translateX(${-wrap.scrollLeft}px)`; }; }
 }
-
-function setView(v, shouldSave=true){
-  currentView=v;
-  $('calendarShell').classList.toggle('list-mode',v==='list');
-  $('calendarShell').classList.toggle('grid-forced',v==='grid');
-  $('gridView').classList.toggle('active',v==='grid');
-  $('listView').classList.toggle('active',v==='list');
-  if(shouldSave) saveState();
-}
+function setView(v, shouldSave=true){ currentView=v; $('calendarShell').classList.toggle('list-mode',v==='list'); $('calendarShell').classList.toggle('grid-forced',v==='grid'); $('gridView').classList.toggle('active',v==='grid'); $('listView').classList.toggle('active',v==='list'); if(shouldSave) saveState(); }
 
 function fillFilters(data){
-  const audSel=$('audience'), roomSel=$('room'), typeSel=$('type'), teacherSel=$('teacher');
-  const curA=audSel.value || audSel.dataset.pendingValue || '', curR=roomSel.value || roomSel.dataset.pendingValue || '', curT=typeSel.value || typeSel.dataset.pendingValue || '', curTeacher=teacherSel.value || teacherSel.dataset.pendingValue || '';
-  audSel.innerHTML='<option value="">Все потоки</option>';
-  roomSel.innerHTML='<option value="">Все аудитории</option>';
-  typeSel.innerHTML='<option value="">Все типы занятий</option>';
-  teacherSel.innerHTML='<option value="">Все преподаватели</option>';
+  const courseSel=$('course'), audSel=$('audience'), roomSel=$('room'), typeSel=$('type'), teacherSel=$('teacher');
+  const curCourse=courseSel.value || courseSel.dataset.pendingValue || '', curA=audSel.value || audSel.dataset.pendingValue || '', curR=roomSel.value || roomSel.dataset.pendingValue || '', curT=typeSel.value || typeSel.dataset.pendingValue || '', curTeacher=teacherSel.value || teacherSel.dataset.pendingValue || '';
+  courseSel.innerHTML='<option value="">Все курсы</option>'; audSel.innerHTML='<option value="">Все потоки</option>'; roomSel.innerHTML='<option value="">Все аудитории</option>'; typeSel.innerHTML='<option value="">Все типы занятий</option>'; teacherSel.innerHTML='<option value="">Все преподаватели</option>';
+  [...new Map(data.filter(e=>e.title).map(e=>[e.title,e.courseLabel||e.title])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'ru')).forEach(([value,label])=>{let o=document.createElement('option');o.value=value;o.textContent=label;courseSel.appendChild(o);});
   [...new Set(data.map(e=>e.calendar).filter(Boolean))].sort().forEach(a=>{let o=document.createElement('option');o.value=a;o.textContent=a;audSel.appendChild(o);});
   [...new Set(data.map(e=>e.room).filter(Boolean))].sort().forEach(r=>{let o=document.createElement('option');o.value=r;o.textContent=r;roomSel.appendChild(o);});
   [...new Set(data.map(e=>e.type).filter(Boolean))].sort().forEach(t=>{let o=document.createElement('option');o.value=t;o.textContent=t;typeSel.appendChild(o);});
   [...new Set(data.map(e=>e.teacher).filter(Boolean))].sort().forEach(t=>{let o=document.createElement('option');o.value=t;o.textContent=t;teacherSel.appendChild(o);});
-  audSel.value=[...audSel.options].some(o=>o.value===curA) ? curA : '';
-  roomSel.value=[...roomSel.options].some(o=>o.value===curR) ? curR : '';
-  typeSel.value=[...typeSel.options].some(o=>o.value===curT) ? curT : '';
-  teacherSel.value=[...teacherSel.options].some(o=>o.value===curTeacher) ? curTeacher : '';
-  audSel.dataset.pendingValue=''; roomSel.dataset.pendingValue=''; typeSel.dataset.pendingValue=''; teacherSel.dataset.pendingValue='';
+  courseSel.value=[...courseSel.options].some(o=>o.value===curCourse)?curCourse:''; audSel.value=[...audSel.options].some(o=>o.value===curA)?curA:''; roomSel.value=[...roomSel.options].some(o=>o.value===curR)?curR:''; typeSel.value=[...typeSel.options].some(o=>o.value===curT)?curT:''; teacherSel.value=[...teacherSel.options].some(o=>o.value===curTeacher)?curTeacher:'';
+  courseSel.dataset.pendingValue=''; audSel.dataset.pendingValue=''; roomSel.dataset.pendingValue=''; typeSel.dataset.pendingValue=''; teacherSel.dataset.pendingValue='';
 }
-function filtered(){ const q=$('search').value.trim().toLowerCase(), aud=$('audience').value, room=$('room').value, typ=$('type').value, teacher=$('teacher').value; return EVENTS.filter(e=>{ if(currentDay!=='all'&&e.day!==currentDay)return false; if(aud && e.calendar!==aud)return false; if(room && e.room!==room)return false; if(typ&&e.type!==typ)return false; if(teacher&&e.teacher!==teacher)return false; if(q){const blob=[e.title,e.room,e.teacher,e.calendar,e.roomAudience,e.audience,e.type,e.level,e.courseId].join(' ').toLowerCase(); if(!blob.includes(q))return false;} return true; });}
-function layoutDay(events){ events=[...events].sort((a,b)=>a.startMin-b.startMin||a.endMin-b.endMin); let groups=[], group=[], groupEnd=-1; for(const e of events){ if(group.length && e.startMin>=groupEnd){groups.push(group); group=[]; groupEnd=-1;} group.push(e); groupEnd=Math.max(groupEnd,e.endMin); } if(group.length)groups.push(group); const pos=new Map(); for(const g of groups){ let cols=[]; for(const e of g){ let c=cols.findIndex(end=>end<=e.startMin); if(c<0){c=cols.length; cols.push(e.endMin);} else cols[c]=e.endMin; pos.set(e,{col:c,total:cols.length}); } for(const e of g) pos.get(e).total=cols.length; } return pos;}
-function renderActiveFilters(){ const chips=[]; const q=$('search').value.trim(), aud=$('audience').value, room=$('room').value, typ=$('type').value, teacher=$('teacher').value; if(currentDay!=='all') chips.push(['day',currentDay]); if(q) chips.push(['search','Поиск: '+q]); if(aud) chips.push(['audience','Поток: '+aud]); if(room) chips.push(['room','Аудитория: '+room]); if(typ) chips.push(['type','Тип: '+typ]); if(teacher) chips.push(['teacher','Преподаватель: '+teacher]); $('activeFilters').innerHTML=chips.map(([k,v])=>`<span class="filter-chip">${esc(v)} <button aria-label="Убрать фильтр" data-k="${k}">×</button></span>`).join(''); $('activeFilters').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(k==='day'){currentDay='all';syncActiveDayTab();} if(k==='search')$('search').value=''; if(k==='audience')$('audience').value=''; if(k==='room')$('room').value=''; if(k==='type')$('type').value=''; if(k==='teacher')$('teacher').value=''; saveState(); render(); }); }
-function renderList(data, visibleDays){ $('listContainer').innerHTML=visibleDays.map(day=>{ const evs=data.filter(e=>e.day===day).sort((a,b)=>a.startMin-b.startMin); if(!evs.length) return ''; return `<div class="list-day"><h3>${esc(day)} · ${evs.length} ${plural(evs.length,'событие','события','событий')}</h3>${evs.map(e=>`<div class="list-card" data-row="${e.row}"><div class="list-time">${esc(e.start)}–${esc(e.end)}</div><div><div class="list-title">${esc(e.title)}</div><div class="list-meta">${esc([e.type,e.room,e.calendar||e.roomAudience,e.teacher].filter(Boolean).join(' · '))}</div></div></div>`).join('')}</div>`; }).join('') || '<div class="empty" style="display:block"><b>Ничего не найдено</b>Попробуйте сбросить фильтры или выбрать другой день.</div>'; $('listContainer').querySelectorAll('.list-card').forEach(card=>{ const e=data.find(x=>String(x.row)===card.dataset.row); if(e) card.onclick=()=>openModal(e); }); }
+function filtered(){ const q=$('search').value.trim().toLowerCase(), course=$('course').value, aud=$('audience').value, room=$('room').value, typ=$('type').value, teacher=$('teacher').value; const daySet=new Set(visibleDays()); return EVENTS.filter(e=>{ if(!daySet.has(e.day))return false; if(course && e.title!==course)return false; if(aud && e.calendar!==aud)return false; if(room && e.room!==room)return false; if(typ&&e.type!==typ)return false; if(teacher&&e.teacher!==teacher)return false; if(q){const blob=[e.title,e.courseId,e.room,e.teacher,e.calendar,e.roomAudience,e.audience,e.type,e.level].join(' ').toLowerCase(); if(!blob.includes(q))return false;} return true; }); }
+function layoutDay(events){ events=[...events].sort((a,b)=>a.startMin-b.startMin||a.endMin-b.endMin); let groups=[], group=[], groupEnd=-1; for(const e of events){ if(group.length && e.startMin>=groupEnd){groups.push(group); group=[]; groupEnd=-1;} group.push(e); groupEnd=Math.max(groupEnd,e.endMin); } if(group.length)groups.push(group); const pos=new Map(); for(const g of groups){ let cols=[]; for(const e of g){ let c=cols.findIndex(end=>end<=e.startMin); if(c<0){c=cols.length; cols.push(e.endMin);} else cols[c]=e.endMin; pos.set(e,{col:c,total:cols.length}); } for(const e of g) pos.get(e).total=cols.length; } return pos; }
+function renderActiveFilters(){ const chips=[]; const q=$('search').value.trim(), course=$('course').value, aud=$('audience').value, room=$('room').value, typ=$('type').value, teacher=$('teacher').value; if(!allDaysSelected()) chips.push(['days','Дни: '+selectedDaysLabel()]); if(q) chips.push(['search','Поиск: '+q]); if(course) chips.push(['course','Курс: '+course]); if(aud) chips.push(['audience','Поток: '+aud]); if(room) chips.push(['room','Аудитория: '+room]); if(typ) chips.push(['type','Тип: '+typ]); if(teacher) chips.push(['teacher','Преподаватель: '+teacher]); $('activeFilters').innerHTML=chips.map(([k,v])=>`<span class="filter-chip">${esc(v)} <button aria-label="Убрать фильтр" data-k="${k}">×</button></span>`).join(''); $('activeFilters').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(k==='days'){selectedDays=[...DAYS];syncActiveDayTab();} if(k==='search')$('search').value=''; if(k==='course')$('course').value=''; if(k==='audience')$('audience').value=''; if(k==='room')$('room').value=''; if(k==='type')$('type').value=''; if(k==='teacher')$('teacher').value=''; saveState(); render(); }); }
+function renderList(data, visible){ $('listContainer').innerHTML=visible.map(day=>{ const evs=data.filter(e=>e.day===day).sort((a,b)=>a.startMin-b.startMin); if(!evs.length) return ''; return `<div class="list-day"><h3>${esc(day)} · ${evs.length} ${plural(evs.length,'событие','события','событий')}</h3>${evs.map(e=>`<div class="list-card" data-row="${e.row}"><div class="list-time">${esc(e.start)}–${esc(e.end)}</div><div><div class="list-title">${esc(e.title)}</div><div class="list-meta">${esc([e.type,e.room,e.calendar||e.roomAudience,e.teacher].filter(Boolean).join(' · '))}</div></div></div>`).join('')}</div>`; }).join('') || '<div class="empty" style="display:block"><b>Ничего не найдено</b>Попробуйте сбросить фильтры или выбрать другой день.</div>'; $('listContainer').querySelectorAll('.list-card').forEach(card=>{ const e=data.find(x=>String(x.row)===card.dataset.row); if(e) card.onclick=()=>openModal(e); }); }
 function plural(n,a,b,c){ n=Math.abs(n)%100; const n1=n%10; if(n>10&&n<20)return c; if(n1>1&&n1<5)return b; if(n1===1)return a; return c; }
-function render(){ fillFilters(EVENTS); const data=filtered(); $('countAll').textContent=data.length; $('countVisibleDays').textContent=(currentDay==='all'?DAYS.length:1); $('countVisibleDays').parentElement.lastChild.textContent=(currentDay==='all'?' дней':' день'); $('empty').style.display=data.length?'none':'block'; renderActiveFilters(); const allMins=EVENTS.flatMap(e=>[e.startMin,e.endMin]).filter(Number.isFinite); if(allMins.length){START_HOUR=Math.max(0,Math.floor(Math.min(...allMins)/60)); END_HOUR=Math.min(24,Math.ceil(Math.max(...allMins)/60));} document.documentElement.style.setProperty('--hours', END_HOUR-START_HOUR); $('timePill').textContent=`${String(START_HOUR).padStart(2,'0')}:00–${String(END_HOUR).padStart(2,'0')}:00`; const visibleDays=currentDay==='all'?DAYS:[currentDay]; document.documentElement.style.setProperty('--visible-days',visibleDays.length); document.documentElement.style.setProperty('--grid-min',currentDay==='all'?'1220px':'760px'); $('daysHeader').innerHTML='<div class="corner"></div>'+visibleDays.map(d=>{ const n=data.filter(e=>e.day===d).length; return `<div class="day-head"><span>${esc(d)}</span><span class="day-count">${n} ${plural(n,'занятие','занятия','занятий')}</span></div>`; }).join(''); $('timeAxis').innerHTML=''; for(let h=START_HOUR; h<=END_HOUR; h++){let lab=document.createElement('div');lab.className='time-label';const rawTop=(h-START_HOUR)*82;const maxTop=(END_HOUR-START_HOUR)*82-14;lab.style.top=Math.min(Math.max(rawTop,14),maxTop)+'px';lab.textContent=String(h).padStart(2,'0')+':00';$('timeAxis').appendChild(lab);} $('daysGrid').innerHTML=''; visibleDays.forEach(day=>{ const col=document.createElement('div'); col.className='day-col'; const evs=data.filter(e=>e.day===day); const pos=layoutDay(evs); evs.forEach(e=>{ const p=pos.get(e)||{col:0,total:1}; const top=((e.startMin-START_HOUR*60)/60)*82+5; const height=Math.max(((e.endMin-e.startMin)/60)*82-10,44); const gap=4, width=(100/p.total), left=p.col*width; const card=document.createElement('div'); card.className='event '+(((e.audience||'').includes('Бак')||(e.roomAudience||'').includes('Бак'))?'bak ':'')+(p.total>4||height<58?'dense':''); card.style.top=top+'px'; card.style.height=height+'px'; card.style.left=`calc(${left}% + ${gap}px)`; card.style.width=`calc(${width}% - ${gap*2}px)`; card.innerHTML=`<div class="event-title">${esc(e.title)}</div><div class="event-meta">${esc(e.start)}–${esc(e.end)} · ${esc(e.room||'ауд. не указана')}</div><div class="event-meta">${esc(e.calendar||e.roomAudience||'')}</div><div class="badge-row">${e.type?`<span class="badge">${esc(e.type)}</span>`:''}${(e.audience||'').includes('Бак')?`<span class="badge dark">Бак</span>`:''}${e.level?`<span class="badge">${esc(e.level)}</span>`:''}</div>`; card.onclick=()=>openModal(e); col.appendChild(card); }); $('daysGrid').appendChild(col); }); renderList(data, visibleDays); }
+function render(){ fillFilters(EVENTS); const data=filtered(); const visible=visibleDays(); $('countAll').textContent=data.length; $('countVisibleDays').textContent=visible.length; $('countVisibleDays').parentElement.lastChild.textContent=visible.length===1?' день':' дней'; $('empty').style.display=data.length?'none':'block'; renderActiveFilters(); const allMins=EVENTS.flatMap(e=>[e.startMin,e.endMin]).filter(Number.isFinite); if(allMins.length){START_HOUR=Math.max(0,Math.floor(Math.min(...allMins)/60)); END_HOUR=Math.min(24,Math.ceil(Math.max(...allMins)/60));} document.documentElement.style.setProperty('--hours', END_HOUR-START_HOUR); $('timePill').textContent=`${String(START_HOUR).padStart(2,'0')}:00–${String(END_HOUR).padStart(2,'0')}:00`; document.documentElement.style.setProperty('--visible-days',visible.length); document.documentElement.style.setProperty('--grid-min',visible.length>1?'1220px':'760px'); $('daysHeader').innerHTML='<div class="corner"></div>'+visible.map(d=>{ const n=data.filter(e=>e.day===d).length; return `<div class="day-head"><span>${esc(d)}</span><span class="day-count">${n} ${plural(n,'занятие','занятия','занятий')}</span></div>`; }).join(''); $('timeAxis').innerHTML=''; for(let h=START_HOUR; h<=END_HOUR; h++){let lab=document.createElement('div');lab.className='time-label';const rawTop=(h-START_HOUR)*82;const maxTop=(END_HOUR-START_HOUR)*82-14;lab.style.top=Math.min(Math.max(rawTop,14),maxTop)+'px';lab.textContent=String(h).padStart(2,'0')+':00';$('timeAxis').appendChild(lab);} $('daysGrid').innerHTML=''; visible.forEach(day=>{ const col=document.createElement('div'); col.className='day-col'; const evs=data.filter(e=>e.day===day); const pos=layoutDay(evs); evs.forEach(e=>{ const p=pos.get(e)||{col:0,total:1}; const top=((e.startMin-START_HOUR*60)/60)*82+5; const height=Math.max(((e.endMin-e.startMin)/60)*82-10,44); const gap=4, width=(100/p.total), left=p.col*width; const card=document.createElement('div'); card.className='event '+(((e.audience||'').includes('Бак')||(e.roomAudience||'').includes('Бак'))?'bak ':'')+(p.total>4||height<58?'dense':''); card.style.top=top+'px'; card.style.height=height+'px'; card.style.left=`calc(${left}% + ${gap}px)`; card.style.width=`calc(${width}% - ${gap*2}px)`; card.innerHTML=`<div class="event-title">${esc(e.title)}</div><div class="event-meta">${esc(e.start)}–${esc(e.end)} · ${esc(e.room||'ауд. не указана')}</div><div class="event-meta">${esc(e.calendar||e.roomAudience||'')}</div><div class="badge-row">${e.type?`<span class="badge">${esc(e.type)}</span>`:''}${(e.audience||'').includes('Бак')?`<span class="badge dark">Бак</span>`:''}${e.level?`<span class="badge">${esc(e.level)}</span>`:''}</div>`; card.onclick=()=>openModal(e); col.appendChild(card); }); $('daysGrid').appendChild(col); }); renderList(data, visible); }
 function openModal(e){ $('modalTitle').textContent=e.title; const details=[['День и время',`${e.day}, ${e.start}–${e.end}`],['Период',`${e.startDate||'—'} — ${e.endDate||'—'}${e.periodicity?`, периодичность: ${e.periodicity}`:''}`],['Поток',e.calendar||'—'],['Поток по аудитории',e.roomAudience||'—'],['Уровень',e.level||'—'],['Тип',e.type||'—'],['Аудитория',e.room||'—'],['Преподаватель',e.teacher||'—'],['Курс / занятие',`${e.courseId||'—'} / ${e.eventNumber||'—'}`],['Группа',e.groupNumber||'—']]; $('modalDetails').innerHTML=details.map(([k,v])=>`<div>${esc(k)}</div><div>${esc(v)}</div>`).join(''); $('modal').classList.add('open'); }
 load();
 </script></body></html>
